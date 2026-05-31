@@ -1,0 +1,26 @@
+name: Link check
+
+# Dogfoods the link-rot Action against this repo's own docs. Runs offline so
+# CI never makes live network requests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  link-rot:
+    name: Check docs with the link-rot Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run link-rot
+        uses: ./
+        with:
+          paths: '**/*.md'
+          offline: 'true'
+          comment: 'false'
+          fail-on-error: 'true'

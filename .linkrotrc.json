@@ -1,0 +1,12 @@
+{
+  "exclude": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "dist/**",
+    "test/fixtures/**"
+  ],
+  "ignore": [],
+  "timeout": 15000,
+  "retries": 2,
+  "okStatuses": [403, 429]
+}

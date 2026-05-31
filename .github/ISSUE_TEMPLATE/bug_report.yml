@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a problem with link-rot
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to file a bug! Please fill in as much as you can.
+  - type: input
+    id: version
+    attributes:
+      label: link-rot version
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What command did you run, and what went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A minimal Markdown snippet, config, and/or command that reproduces it.
+      render: shell
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: 'v20.x'
+    validations:
+      required: true
