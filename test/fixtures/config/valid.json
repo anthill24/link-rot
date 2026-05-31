@@ -1,0 +1,1 @@
+{ "timeout": 5000, "retries": 1, "ignore": ["https://ignore.me/**"], "okStatuses": [403], "offline": true }

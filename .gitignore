@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Test / coverage output
+coverage/
+*.lcov
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.tsbuildinfo
+
+# NOTE: dist/ is intentionally committed.
+# The GitHub Action (action.yml) runs the bundled CLI from dist/, so the
+# build output must exist at every released tag. See CONTRIBUTING.md.

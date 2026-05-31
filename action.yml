@@ -1,0 +1,183 @@
+name: 'link-rot'
+description: 'Find dead external links, broken relative paths, and stale anchors in Markdown — with a PR comment and job summary.'
+author: 'anthill24'
+branding:
+  icon: 'link-2'
+  color: 'purple'
+
+inputs:
+  paths:
+    description: 'Space- or newline-separated globs/paths to scan.'
+    required: false
+    default: '**/*.md'
+  config:
+    description: 'Path to a .linkrotrc.json config file.'
+    required: false
+    default: ''
+  offline:
+    description: 'Skip the network; validate only relative paths and anchors.'
+    required: false
+    default: 'false'
+  fail-on-error:
+    description: 'Fail the job when broken links are found.'
+    required: false
+    default: 'true'
+  comment:
+    description: 'Post or update a comment on the pull request with the report.'
+    required: false
+    default: 'false'
+  comment-mode:
+    description: 'When to comment: "always" or "on-failure".'
+    required: false
+    default: 'always'
+  github-token:
+    description: >-
+      Token used to post the PR comment. Needs "pull-requests: write".
+      The default GITHUB_TOKEN cannot comment on pull requests opened from
+      forks; see the README for details.
+    required: false
+    default: ${{ github.token }}
+  working-directory:
+    description: 'Directory to run from (relative links resolve against it).'
+    required: false
+    default: '.'
+  extra-args:
+    description: 'Additional raw flags passed to "link-rot check" (e.g. "--ignore https://x.com/**").'
+    required: false
+    default: ''
+
+outputs:
+  broken:
+    description: 'Number of broken links found.'
+    value: ${{ steps.scan.outputs.broken }}
+  total:
+    description: 'Total number of links checked.'
+    value: ${{ steps.scan.outputs.total }}
+  report:
+    description: 'Path to the generated Markdown report file.'
+    value: ${{ steps.scan.outputs.report }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Run link-rot
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        LINKROT_CLI: ${{ github.action_path }}/dist/cli.js
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_OFFLINE: ${{ inputs.offline }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        set -euo pipefail
+
+        args=(check)
+        # Split paths on whitespace WITHOUT letting the shell glob-expand them
+        # (the CLI does its own globbing).
+        set -f
+        # shellcheck disable=SC2086
+        set -- $INPUT_PATHS
+        set +f
+        args+=("$@")
+
+        if [ -n "$INPUT_CONFIG" ]; then args+=(--config "$INPUT_CONFIG"); fi
+        if [ "$INPUT_OFFLINE" = "true" ]; then args+=(--offline); fi
+
+        if [ -n "$INPUT_EXTRA_ARGS" ]; then
+          set -f
+          # shellcheck disable=SC2086
+          set -- $INPUT_EXTRA_ARGS
+          set +f
+          args+=("$@")
+        fi
+
+        json="$RUNNER_TEMP/link-rot.json"
+        report="$RUNNER_TEMP/link-rot.md"
+        errlog="$RUNNER_TEMP/link-rot.err"
+
+        echo "Running: link-rot ${args[*]}"
+        set +e
+        node "$LINKROT_CLI" "${args[@]}" --format json > "$json" 2> "$errlog"
+        check_exit=$?
+        set -e
+
+        # Surface any diagnostics (e.g. "no files matched") in the step log.
+        if [ -s "$errlog" ]; then cat "$errlog" >&2; fi
+
+        if [ "$check_exit" -ge 2 ]; then
+          # The CLI writes errors to stderr, so report that, not stdout.
+          echo "::error::link-rot failed to run (exit $check_exit): $(cat "$errlog")"
+          exit 1
+        fi
+
+        # Re-format the same JSON (no extra network calls) for humans + summary.
+        node "$LINKROT_CLI" render "$json" --format markdown > "$report"
+        node "$LINKROT_CLI" render "$json" --format text || true
+
+        broken=$(jq -r '.summary.broken' "$json")
+        total=$(jq -r '.summary.totalLinks' "$json")
+
+        {
+          echo "broken=$broken"
+          echo "total=$total"
+          echo "report=$report"
+          echo "exit-code=$check_exit"
+        } >> "$GITHUB_OUTPUT"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Comment on pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' && (inputs.comment-mode == 'always' || steps.scan.outputs.broken != '0') }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPORT: ${{ steps.scan.outputs.report }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        # Tolerant of permission failures: a missing pull-requests:write scope
+        # (common for fork PRs with the default token) only warns.
+        marker='<!-- link-rot-report -->'
+        body="$(printf '%s\n%s' "$marker" "$(cat "$REPORT")")"
+
+        # With --paginate, gh applies --jq per page; emit one id per match
+        # across all pages, then take the first so a stale duplicate on a later
+        # page can't produce a multi-line id.
+        existing=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+          --jq ".[] | select(.body | contains(\"$marker\")) | .id" 2>/dev/null | head -n1 || true)
+
+        if [ -n "$existing" ]; then
+          if gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" >/dev/null 2>&1; then
+            echo "Updated existing link-rot comment (#$existing)."
+          else
+            echo "::warning::link-rot could not update the PR comment (missing pull-requests: write?)."
+          fi
+        else
+          if gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$body" >/dev/null 2>&1; then
+            echo "Created link-rot comment."
+          else
+            echo "::warning::link-rot could not post a PR comment (missing pull-requests: write?)."
+          fi
+        fi
+
+    - name: Enforce result
+      if: ${{ inputs.fail-on-error == 'true' }}
+      shell: bash
+      env:
+        BROKEN: ${{ steps.scan.outputs.broken }}
+      run: |
+        set -euo pipefail
+        if [ "${BROKEN:-0}" -gt 0 ]; then
+          echo "::error::link-rot found $BROKEN broken link(s). See the job summary for details."
+          exit 1
+        fi
+        echo "link-rot: no broken links found."
