@@ -97,6 +97,7 @@ OPTIONS
       --concurrency <n>   Max concurrent external requests
       --retries <n>       Retry attempts for transient failures (429/5xx/network)
       --ignore <glob>     Ignore links matching this glob (repeatable)
+      --exclude <glob>    Exclude files matching this glob from scanning (repeatable)
       --ok-status <code>  Treat this HTTP status as OK (repeatable)
       --base <dir>        Base directory for root-absolute (/foo) links
       --user-agent <ua>   User-Agent header for external requests
