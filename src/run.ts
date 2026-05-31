@@ -1,7 +1,12 @@
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { check } from './checker.js';
-import { loadConfigFile, resolveConfig, type LinkRotConfig } from './config.js';
+import {
+  loadConfigFile,
+  resolveConfig,
+  DEFAULT_CONFIG,
+  type LinkRotConfig,
+} from './config.js';
 import {
   formatReport,
   isReportFormat,
@@ -44,6 +49,7 @@ OPTIONS
       --concurrency <n>   Max concurrent external requests
       --retries <n>       Retry attempts for transient failures (429/5xx/network)
       --ignore <glob>     Ignore links matching this glob (repeatable)
+      --exclude <glob>    Exclude files matching this glob from scanning (repeatable)
       --ok-status <code>  Treat this HTTP status as OK (repeatable)
       --base <dir>        Base directory for root-absolute (/foo) links
       --user-agent <ua>   User-Agent header for external requests
@@ -104,6 +110,7 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
         concurrency: { type: 'string' },
         retries: { type: 'string' },
         ignore: { type: 'string', multiple: true },
+        exclude: { type: 'string', multiple: true },
         'ok-status': { type: 'string', multiple: true },
         base: { type: 'string' },
         'user-agent': { type: 'string' },
@@ -171,6 +178,7 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
   const retries = parseInteger('retries', values.retries as string, errors);
 
   const cliIgnore = (values.ignore as string[] | undefined) ?? [];
+  const cliExclude = (values.exclude as string[] | undefined) ?? [];
   const cliOkStatuses: number[] = [];
   for (const raw of (values['ok-status'] as string[] | undefined) ?? []) {
     const code = parseInteger('ok-status', raw, errors);
@@ -214,6 +222,12 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
     ignore:
       cliIgnore.length > 0
         ? [...(fileConfig.ignore ?? []), ...cliIgnore]
+        : undefined,
+    // Append CLI excludes on top of the in-effect exclude list (config's, or
+    // the defaults) so passing --exclude never silently drops node_modules.
+    exclude:
+      cliExclude.length > 0
+        ? [...(fileConfig.exclude ?? DEFAULT_CONFIG.exclude), ...cliExclude]
         : undefined,
     okStatuses:
       cliOkStatuses.length > 0

@@ -27,6 +27,8 @@ Initial release.
 - Configuration via `.linkrotrc.json`: `ignore`, `exclude`, `timeout`,
   `concurrency`, `retries`, `retryDelay`, `okStatuses`, `userAgent`, `base`,
   `checkAnchors`, and `offline`. CLI flags override config.
+- `--exclude <glob>` CLI flag (repeatable) to skip files from scanning, layered
+  on top of the config/default `exclude` list.
 - External checking with a concurrency limit, per-request timeout, retries with
   exponential backoff for transient failures (429/5xx/network/timeout), a
   HEAD-then-GET fallback, an in-run cache (each URL fetched at most once), and a

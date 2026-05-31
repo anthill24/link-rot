@@ -89,6 +89,27 @@ describe('run', () => {
     expect(JSON.parse(cap.out).summary.broken).toBe(4);
   });
 
+  it('honors --exclude from the CLI', async () => {
+    const cap = captureIO(PROJECT_DIR);
+    const code = await run(
+      [
+        'check',
+        '**/*.md',
+        '--offline',
+        '--exclude',
+        'docs/**',
+        '--format',
+        'json',
+      ],
+      cap.io,
+    );
+    expect(code).toBe(EXIT_BROKEN);
+    const parsed = JSON.parse(cap.out);
+    // Only README.md remains; its three broken links stay.
+    expect(parsed.summary.files).toBe(1);
+    expect(parsed.summary.broken).toBe(3);
+  });
+
   it('rejects an invalid --format', async () => {
     const cap = captureIO(PROJECT_DIR);
     const code = await run(['check', '**/*.md', '--format', 'xml'], cap.io);

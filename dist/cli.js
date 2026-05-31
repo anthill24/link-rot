@@ -15062,6 +15062,7 @@ OPTIONS
       --concurrency <n>   Max concurrent external requests
       --retries <n>       Retry attempts for transient failures (429/5xx/network)
       --ignore <glob>     Ignore links matching this glob (repeatable)
+      --exclude <glob>    Exclude files matching this glob from scanning (repeatable)
       --ok-status <code>  Treat this HTTP status as OK (repeatable)
       --base <dir>        Base directory for root-absolute (/foo) links
       --user-agent <ua>   User-Agent header for external requests
@@ -15106,6 +15107,7 @@ async function run(argv, io) {
         concurrency: { type: "string" },
         retries: { type: "string" },
         ignore: { type: "string", multiple: true },
+        exclude: { type: "string", multiple: true },
         "ok-status": { type: "string", multiple: true },
         base: { type: "string" },
         "user-agent": { type: "string" },
@@ -15171,6 +15173,7 @@ async function run(argv, io) {
   );
   const retries = parseInteger("retries", values.retries, errors);
   const cliIgnore = values.ignore ?? [];
+  const cliExclude = values.exclude ?? [];
   const cliOkStatuses = [];
   for (const raw of values["ok-status"] ?? []) {
     const code4 = parseInteger("ok-status", raw, errors);
@@ -15210,6 +15213,9 @@ async function run(argv, io) {
     userAgent: values["user-agent"],
     checkAnchors: values["no-check-anchors"] ? false : void 0,
     ignore: cliIgnore.length > 0 ? [...fileConfig.ignore ?? [], ...cliIgnore] : void 0,
+    // Append CLI excludes on top of the in-effect exclude list (config's, or
+    // the defaults) so passing --exclude never silently drops node_modules.
+    exclude: cliExclude.length > 0 ? [...fileConfig.exclude ?? DEFAULT_CONFIG.exclude, ...cliExclude] : void 0,
     okStatuses: cliOkStatuses.length > 0 ? [...fileConfig.okStatuses ?? [], ...cliOkStatuses] : void 0
   };
   const config = resolveConfig(fileConfig, overrides, io.cwd);
